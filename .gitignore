@@ -1,0 +1,4 @@
+.env
+venv
+haier-headless-server-guide.md
+__pycache__

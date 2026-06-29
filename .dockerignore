@@ -1,0 +1,53 @@
+# =========================
+# 🧠 Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info
+.env
+.venv
+venv/
+env/
+
+# =========================
+# 🧰 Dev & Editor Files
+# =========================
+.idea/
+.vscode/
+*.swp
+*.swo
+*.bak
+
+# =========================
+# 🧪 Tests & Docs
+# =========================
+tests/
+docs/
+examples/
+*.md
+
+# =========================
+# 🗂️ OS / Misc
+# =========================
+.DS_Store
+Thumbs.db
+*.log
+
+# =========================
+# 📦 Node / Frontend (if any)
+# =========================
+node_modules/
+dist/
+build/
+
+# =========================
+# 🔐 Secrets / Keys
+# =========================
+*.pem
+*.key
+*.crt
+*.env.local
