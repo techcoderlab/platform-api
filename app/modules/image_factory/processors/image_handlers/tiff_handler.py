@@ -3,7 +3,8 @@ import cv2
 import numpy as np
 import io
 from PIL import Image, features
-from app.core.logs import logger
+from app.core.logging import get_logger
+logger = get_logger(__name__)
 
 
 class TIFFHandler(BaseFormatHandler):

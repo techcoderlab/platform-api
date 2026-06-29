@@ -3,7 +3,8 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from app.core.logs import logger
+from app.core.logging import get_logger
+logger = get_logger(__name__)
 
 
 class PNGHandler(BaseFormatHandler):
