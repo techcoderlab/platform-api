@@ -51,8 +51,8 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
 
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        # Exempt health checks and open docs from auth
-        if request.url.path.startswith("/healthz") or request.url.path in ["/docs", "/redoc", "/openapi.json"]:
+        # Exempt CORS preflight, health checks, and open docs from auth
+        if request.method == "OPTIONS" or request.url.path.startswith("/healthz") or request.url.path in ["/docs", "/redoc", "/openapi.json"]:
             return await call_next(request)
             
         api_key = request.headers.get("X-API-Key")
