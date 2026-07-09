@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     MAX_QUEUE_SIZE: int = Field(default=100, description="Max pending analysis tasks")
     WORKER_COUNT: int = Field(default=4, description="Number of background scraper workers")
 
+    ENABLE_IMAGE_FACTORY: bool = Field(default=False, description="Enable image factory module")
+    ENABLE_WEB_SCRAPER: bool = Field(default=False, description="Enable web scraper module")
+
     @property
     def api_base(self) -> str:
         return f"/{self.API_PREFIX}/{self.API_VERSION}"
