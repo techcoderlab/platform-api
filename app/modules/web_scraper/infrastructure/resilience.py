@@ -9,7 +9,8 @@ from tenacity import (
 )
 from circuitbreaker import circuit, CircuitBreakerError
 
-log = structlog.get_logger(__name__)
+from app.core.logging import get_logger
+log = get_logger(__name__)
 
 # ── Sentinel exceptions ───────────────────────────────────────────────────────
 

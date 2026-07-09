@@ -4,7 +4,8 @@ import time
 from typing import Dict, Any, Optional
 import asyncio
 
-log = structlog.get_logger(__name__)
+from app.core.logging import get_logger
+log = get_logger(__name__)
 
 class InMemorySessionStore:
     def __init__(self):

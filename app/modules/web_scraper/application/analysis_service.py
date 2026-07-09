@@ -21,7 +21,8 @@ from app.modules.web_scraper.domain.ports import AnalysisRepository, BrowserPort
 from app.modules.web_scraper.application.task_queue import TaskQueue
 from app.modules.web_scraper.application.extractor_utils import DataExtractor, LinkExtractor
 
-log = structlog.get_logger(__name__)
+from app.core.logging import get_logger
+log = get_logger(__name__)
 
 # SLO: p99 latency < 30s per analysis | error rate < 5% | availability > 99.9%
 

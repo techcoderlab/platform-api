@@ -15,7 +15,8 @@ from copy import deepcopy
 from app.modules.web_scraper.domain.models import AnalysisResult
 from app.modules.web_scraper.domain.ports import AnalysisRepository
 
-log = structlog.get_logger(__name__)
+from app.core.logging import get_logger
+log = get_logger(__name__)
 
 # ── Cache strategy (Pillar 4) ─────────────────────────────────────────────────
 # Tier 1: In-process OrderedDict with LRU eviction.

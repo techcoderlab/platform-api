@@ -27,7 +27,8 @@ from app.modules.web_scraper.presentation.schemas import (
     ReadinessResponse,
 )
 
-log = structlog.get_logger(__name__)
+from app.core.logging import get_logger
+log = get_logger(__name__)
 
 # ── Router ────────────────────────────────────────────────────────────────────
 

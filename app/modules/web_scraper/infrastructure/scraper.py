@@ -17,7 +17,8 @@ from app.modules.web_scraper.infrastructure.resilience import (
 
 from app.core.config import settings
 
-log = structlog.get_logger(__name__)
+from app.core.logging import get_logger
+log = get_logger(__name__)
 
 # ── Status-code → exception mapping ──────────────────────────────────────────
 _STATUS_MAP: dict[int, type[Exception]] = {
