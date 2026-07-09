@@ -155,8 +155,7 @@ class AnalysisService:
             result.error = f"{type(exc).__name__}: {exc}"
             log.error(
                 "analysis_failed",
-                error_class=type(exc).__name__,
-                error=str(exc),
+                extra={"error_class": type(exc).__name__, "error": str(exc)},
                 exc_info=True,
             )
 
