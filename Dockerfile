@@ -25,10 +25,7 @@ WORKDIR /app
 
 # Install runtime dependencies for OpenCV, Pillow, and Playwright
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libgl1 libglib2.0-0 && \
-    pip install playwright==1.44.0 && \
-    playwright install-deps chromium && \
-    pip uninstall -y playwright && \
+    apt-get install -y --no-install-recommends libgl1 libglib2.0-0 chromium && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -50,8 +47,6 @@ USER appuser
 ENV PATH=/home/appuser/.local/bin:$PATH
 ENV PYTHONPATH=/app
 
-# Install Playwright Chromium binaries to the appuser's cache
-RUN playwright install chromium
 
 # Expose application port
 EXPOSE 8012

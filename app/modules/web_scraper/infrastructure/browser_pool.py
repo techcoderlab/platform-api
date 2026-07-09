@@ -49,6 +49,7 @@ class BrowserPool:
         self._pw      = await async_playwright().start()
         self._browser = await self._pw.chromium.launch(
             headless=True,
+            executable_path=self._settings.CHROMIUM_PATH,
             args=[
                 "--no-sandbox",
                 "--disable-setuid-sandbox",

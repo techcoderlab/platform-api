@@ -33,44 +33,49 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.SERVICE_NAME} in {settings.ENV} environment")
     
     # ── Web Scraper Dependencies ──
-    session_store = InMemorySessionStore()
-    app.state.session_cleanup_task = asyncio.create_task(session_store.start_cleanup_task())
+    if settings.ENABLE_WEB_SCRAPER:
+        logger.info("Initializing Web Scraper dependencies")
+        session_store = InMemorySessionStore()
+        app.state.session_cleanup_task = asyncio.create_task(session_store.start_cleanup_task())
 
-    browser_pool = BrowserPool(settings, session_store)
-    await browser_pool.start()
+        browser_pool = BrowserPool(settings, session_store)
+        await browser_pool.start()
 
-    scraper = PlaywrightScraper(pool=browser_pool)
-    repository = InMemoryAnalysisRepository()
+        scraper = PlaywrightScraper(pool=browser_pool)
+        repository = InMemoryAnalysisRepository()
 
-    task_queue = TaskQueue(
-        max_size=settings.MAX_QUEUE_SIZE,
-        worker_count=settings.WORKER_COUNT,
-    )
-    await task_queue.start()
+        task_queue = TaskQueue(
+            max_size=settings.MAX_QUEUE_SIZE,
+            worker_count=settings.WORKER_COUNT,
+        )
+        await task_queue.start()
 
-    analysis_service = AnalysisService(
-        browser=scraper,
-        repository=repository,
-        queue=task_queue,
-    )
+        analysis_service = AnalysisService(
+            browser=scraper,
+            repository=repository,
+            queue=task_queue,
+        )
 
-    # Attach to app.state
+        # Attach to app.state
+        app.state.browser_pool = browser_pool
+        app.state.task_queue = task_queue
+        app.state.analysis_service = analysis_service
+        app.state.scraper = scraper
+
     app.state.settings = settings
-    app.state.browser_pool = browser_pool
-    app.state.task_queue = task_queue
-    app.state.analysis_service = analysis_service
-
     yield
     
     # Shutdown
     logger.info(f"Shutting down {settings.SERVICE_NAME}")
-    if hasattr(app.state, "session_cleanup_task"):
-        app.state.session_cleanup_task.cancel()
-        
-    await task_queue.stop()
-    await scraper.close()
-    await browser_pool.stop()
-    logger.info("web_scraper shutdown complete")
+    
+    if settings.ENABLE_WEB_SCRAPER:
+        if hasattr(app.state, "session_cleanup_task"):
+            app.state.session_cleanup_task.cancel()
+            
+        await app.state.task_queue.stop()
+        await app.state.scraper.close()
+        await app.state.browser_pool.stop()
+        logger.info("web_scraper shutdown complete")
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -88,14 +93,20 @@ def create_app() -> FastAPI:
     
     # Register Routers
     app.include_router(health_router)
-    app.include_router(
-        image_factory_router,
-        prefix=f"{settings.api_base}/image-factory"
-    )
-    app.include_router(
-        web_scraper_router,
-        prefix=f"{settings.api_base}/web-scraper"
-    )
+    
+    if settings.ENABLE_IMAGE_FACTORY:
+        app.include_router(
+            image_factory_router,
+            prefix=f"{settings.api_base}/image-factory"
+        )
+        logger.info("Registered Image Factory endpoints")
+        
+    if settings.ENABLE_WEB_SCRAPER:
+        app.include_router(
+            web_scraper_router,
+            prefix=f"{settings.api_base}/web-scraper"
+        )
+        logger.info("Registered Web Scraper endpoints")
     
     return app
 

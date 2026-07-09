@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     ZIP_EXPIRES_IN: int = Field(default=600, description="Zip expiration in seconds (default 10m)")
     
     # Module: Web Scraper (Playwright)
+    CHROMIUM_PATH: str = Field(default="/usr/bin/chromium", description="Path to system chromium")
     POOL_SIZE: int = Field(default=4, description="Max number of browsers in pool")
     MAX_ACTIVE_CONTEXTS: int = Field(default=20, description="Max number of browser sessions in total")
     BROWSER_SESSION_TTL: int = Field(default=300, description="Expiry time for each browser session")
