@@ -80,7 +80,7 @@ class AnalysisService:
         # Enqueue background work — raises QueueFullError if full (Pillar 3)
         await self._queue.enqueue(self._process_job, job_id, url, wait_selector, session_id)
 
-        log.info("analysis_submitted", job_id=job_id, url=url)
+        log.info("analysis_submitted", extra={"job_id": job_id, "url": url})
         return job_id
 
     async def get_job(self, job_id: str) -> AnalysisResult | None:
@@ -129,7 +129,7 @@ class AnalysisService:
         # MUTATION: transition to RUNNING
         result = await self._repo.get(job_id)
         if result is None:
-            log.error("job_not_found_for_processing", job_id=job_id)
+            log.error("job_not_found_for_processing", extra={"job_id": job_id})
             return
 
         result.status = AnalysisStatus.RUNNING
@@ -147,7 +147,7 @@ class AnalysisService:
             result.duration_ms = round(elapsed_ms, 2)
             result.status = AnalysisStatus.COMPLETED
 
-            log.info("analysis_completed", duration_ms=result.duration_ms)
+            log.info("analysis_completed", extra={"duration_ms": result.duration_ms})
 
         except Exception as exc:
             # MUTATION: record failure

@@ -65,9 +65,9 @@ class InMemoryAnalysisRepository(AnalysisRepository):
             # Evict LRU entries if over capacity — O(1) per eviction
             while len(self._store) > self._max_entries:
                 evicted_key, _ = self._store.popitem(last=False)
-                log.debug("lru_eviction", evicted_job_id=evicted_key)
+                log.debug("lru_eviction", extra={"evicted_job_id": evicted_key})
 
-        log.debug("result_saved", job_id=result.job_id, status=result.status.value)
+        log.debug("result_saved", extra={"job_id": result.job_id, "status": result.status.value})
 
     async def get(self, job_id: str) -> AnalysisResult | None:
         """Retrieve an AnalysisResult by job_id.

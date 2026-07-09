@@ -19,7 +19,7 @@ class InMemorySessionStore:
         if time.time() > data['expires_at']:
             # Graceful cleanup agar session expire ho gaya ho
             del self._store[session_id]
-            log.info("session_expired", session_id=session_id)
+            log.info("session_expired", extra={"session_id": session_id})
             return None
             
         return data['state']
@@ -29,7 +29,7 @@ class InMemorySessionStore:
             'state': state,
             'expires_at': time.time() + ttl_seconds
         }
-        log.debug("session_saved", session_id=session_id, ttl=ttl_seconds)
+        log.debug("session_saved", extra={"session_id": session_id, "ttl": ttl_seconds})
 
     # Future-proof: Background cleanup task (No memory leaks)
     async def start_cleanup_task(self):

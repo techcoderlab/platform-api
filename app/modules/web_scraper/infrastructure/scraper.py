@@ -70,7 +70,7 @@ class PlaywrightScraper(BrowserPort):
                     raise TransientNetworkError("No response object returned")
 
                 status = response.status
-                log.info("fetch_response", status=status)
+                log.info("fetch_response", extra={"status": status})
 
                 if status in _STATUS_MAP:
                     raise _STATUS_MAP[status](f"HTTP {status} from {url}")
@@ -84,16 +84,16 @@ class PlaywrightScraper(BrowserPort):
                 await self._simulate_human_behavior(page)
                 snapshot = await self._build_snapshot(page, url, status)
                 elapsed = (time.monotonic() - t0) * 1000
-                log.info("fetch_complete", duration_ms=round(elapsed, 2))
+                log.info("fetch_complete", extra={"duration_ms": round(elapsed, 2)})
                 return snapshot
 
             except PWTimeout as exc:
-                log.warning("fetch_timeout", error=str(exc))
+                log.warning("fetch_timeout", extra={"error": str(exc)})
                 raise TransientNetworkError(str(exc)) from exc
             except (BlockedError, RateLimitError, NotFoundError):
                 raise  # let resilience decorators handle (NotFoundError will not be retried)
             except Exception as exc:
-                log.error("fetch_error", error=str(exc), exc_info=True)
+                log.error("fetch_error", extra={"error": str(exc)}, exc_info=True)
                 raise TransientNetworkError(str(exc)) from exc
             finally:
                 await page.close()
@@ -128,7 +128,7 @@ class PlaywrightScraper(BrowserPort):
             except Exception as exc:
                 err_msg = str(exc).lower()
                 if "navigating" in err_msg and attempt < 2:
-                    log.warning("snapshot_navigation_retry", attempt=attempt + 1, url=url)
+                    log.warning("snapshot_navigation_retry", extra={"attempt": attempt + 1, "url": url})
                     await asyncio.sleep(2.0)
                     continue
                 raise

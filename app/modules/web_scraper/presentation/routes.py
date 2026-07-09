@@ -134,14 +134,14 @@ async def submit_analysis(body: AnalyzeRequest, request: Request) -> AnalyzeResp
         )
     except QueueFullError as exc:
         # Pillar 6: map domain error -> HTTP status at presentation boundary
-        log.warning("queue_full_rejection", url=str(body.url))
+        log.warning("queue_full_rejection", extra={"url": str(body.url)})
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=str(exc),
         ) from exc
 
     poll_url = f"/jobs/{job_id}"
-    log.info("analysis_accepted", job_id=job_id, url=str(body.url))
+    log.info("analysis_accepted", extra={"job_id": job_id, "url": str(body.url)})
 
     return AnalyzeResponse(
         job_id=job_id,

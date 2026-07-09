@@ -63,7 +63,7 @@ def with_circuit_breaker(failure_threshold: int = 5, recovery_timeout: int = 30)
             try:
                 return await cb_fn(*args, **kwargs)
             except CircuitBreakerError as exc:
-                log.error("circuit_open", reason=str(exc))
+                log.error("circuit_open", extra={"reason": str(exc)})
                 raise BlockedError(f"Circuit open: {exc}") from exc
         return wrapper
     return decorator

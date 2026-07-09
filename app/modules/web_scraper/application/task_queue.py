@@ -67,8 +67,7 @@ class TaskQueue:
             self._workers.append(task)
         log.info(
             "task_queue_started",
-            worker_count=self._worker_count,
-            max_size=self._queue.maxsize,
+            extra={"worker_count": self._worker_count, "max_size": self._queue.maxsize},
         )
 
     async def stop(self) -> None:
@@ -86,9 +85,7 @@ class TaskQueue:
             if isinstance(result, Exception):
                 log.error(
                     "worker_shutdown_error",
-                    worker_id=idx,
-                    error_class=type(result).__name__,
-                    error=str(result),
+                    extra={"worker_id": idx, "error_class": type(result).__name__, "error": str(result)},
                 )
         self._workers.clear()
         log.info("task_queue_stopped")
@@ -111,9 +108,9 @@ class TaskQueue:
         """
         try:
             self._queue.put_nowait((coro_fn, args, kwargs))
-            log.debug("task_enqueued", pending=self._queue.qsize())
+            log.debug("task_enqueued", extra={"pending": self._queue.qsize()})
         except asyncio.QueueFull:
-            log.warning("task_queue_full", max_size=self._queue.maxsize)
+            log.warning("task_queue_full", extra={"max_size": self._queue.maxsize})
             raise QueueFullError(
                 f"Task queue at capacity ({self._queue.maxsize}). Try again later."
             )
@@ -127,12 +124,12 @@ class TaskQueue:
         Args:
             worker_id: Identifier for structured logging.
         """
-        log.info("worker_started", worker_id=worker_id)
+        log.info("worker_started", extra={"worker_id": worker_id})
         while True:
             item = await self._queue.get()
             if item is None:
                 self._queue.task_done()
-                log.info("worker_stopped", worker_id=worker_id)
+                log.info("worker_stopped", extra={"worker_id": worker_id})
                 return
 
             coro_fn, args, kwargs = item
@@ -141,9 +138,7 @@ class TaskQueue:
             except Exception as exc:
                 log.error(
                     "worker_task_failed",
-                    worker_id=worker_id,
-                    error_class=type(exc).__name__,
-                    error=str(exc),
+                    extra={"worker_id": worker_id, "error_class": type(exc).__name__, "error": str(exc)},
                     exc_info=True,
                 )
             finally:
