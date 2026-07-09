@@ -33,6 +33,20 @@ class Settings(BaseSettings):
     ZIP_STORAGE: str = Field(default="/app/data/image_zips", description="Path for temp zip storage")
     ZIP_EXPIRES_IN: int = Field(default=600, description="Zip expiration in seconds (default 10m)")
     
+    # Module: Web Scraper (Playwright)
+    POOL_SIZE: int = Field(default=4, description="Max number of browsers in pool")
+    MAX_ACTIVE_CONTEXTS: int = Field(default=20, description="Max number of browser sessions in total")
+    BROWSER_SESSION_TTL: int = Field(default=300, description="Expiry time for each browser session")
+    PROXY_LIST: str = Field(default="", description="Comma-separated manual proxy list")
+    PROXY_ROTATING_URL: str = Field(default="", description="Rotating proxy URL")
+    CB_FAILURE_THRESHOLD: int = Field(default=5, description="Circuit breaker failure threshold")
+    CB_RECOVERY_TIMEOUT: int = Field(default=30, description="Circuit breaker recovery timeout in seconds")
+    BACKOFF_MAX_ATTEMPTS: int = Field(default=5, description="Max retry attempts")
+    BACKOFF_BASE_WAIT: float = Field(default=2.0, description="Exponential backoff initial wait")
+    BACKOFF_MAX_WAIT: float = Field(default=60.0, description="Exponential backoff max wait cap")
+    MAX_QUEUE_SIZE: int = Field(default=100, description="Max pending analysis tasks")
+    WORKER_COUNT: int = Field(default=4, description="Number of background scraper workers")
+
     @property
     def api_base(self) -> str:
         return f"/{self.API_PREFIX}/{self.API_VERSION}"
