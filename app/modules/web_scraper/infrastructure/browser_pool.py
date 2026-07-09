@@ -13,7 +13,7 @@ from playwright.async_api import (
 )
 from playwright_stealth import Stealth
 
-from app.modules.web_scraper.infrastructure.logging_config import get_logger
+from app.core.logging import get_logger
 from app.core.config import settings
 from app.modules.web_scraper.infrastructure.proxy_manager import ProxyManager
 
