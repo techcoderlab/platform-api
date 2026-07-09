@@ -14,7 +14,7 @@ from playwright.async_api import (
 from playwright_stealth import Stealth
 
 from app.core.logging import get_logger
-from app.core.config import settings
+from app.core.config import settings, Settings
 from app.modules.web_scraper.infrastructure.proxy_manager import ProxyManager
 
 log = get_logger(__name__)

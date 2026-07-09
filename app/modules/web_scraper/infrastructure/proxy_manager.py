@@ -1,6 +1,6 @@
 import random
 from typing import Optional, Dict
-from app.core.config import settings
+from app.core.config import settings, Settings
 
 class ProxyManager:
     def __init__(self, settings: Settings):
