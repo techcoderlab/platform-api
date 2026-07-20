@@ -23,7 +23,7 @@ from app.modules.web_scraper.domain.models import (
 )
 from app.modules.web_scraper.domain.ports import AnalysisRepository, BatchRepository, BrowserPort
 from app.modules.web_scraper.application.task_queue import TaskQueue
-from app.modules.web_scraper.application.extractor_utils import DataExtractor, LinkExtractor
+from app.modules.web_scraper.application.extractor_utils import DataExtractor, LinkExtractor, FormExtractor, CTAExtractor
 
 from app.core.logging import get_logger
 log = get_logger(__name__)
@@ -177,10 +177,13 @@ class AnalysisService:
         """
         
         cleaned_text = re.sub(r'\n\s*\n', '\n\n', snapshot.text.strip())
-        
-        # Hard limit of 15,000 characters (approx 3k-4k tokens)
-        # Ensures the n8n AI node does not crash
-        final_text = (cleaned_text[:15000] + '.. [Content Truncated]') if len(cleaned_text) > 15000 else cleaned_text
+
+        # Raw safety cap — for storage/debugging only, NOT sent to the LLM
+        MAX_RAW_CHARS = 15000
+        final_text = (
+            cleaned_text[:MAX_RAW_CHARS] + '.. [Content Truncated]'
+            if len(cleaned_text) > MAX_RAW_CHARS else cleaned_text
+        )
         
         base_insights = {
             "seo": { 
@@ -188,11 +191,14 @@ class AnalysisService:
                 "description": snapshot.meta.get("description") or snapshot.meta.get("og:description") or "" 
             },
             "content": { 
-                "text": final_text
+                "text": final_text,
+                "screenshots": snapshot.screenshots
             }
         }
         
         base_insights["leads"] = {
+            "forms": FormExtractor.extract_forms(snapshot.html),
+            "ctas": CTAExtractor.extract_ctas(snapshot.html),
             "emails": DataExtractor.find_emails(snapshot.html),
             "phones": DataExtractor.find_contacts(snapshot.html),
             "social_links": LinkExtractor.find_social_links(snapshot.links),
@@ -503,9 +509,9 @@ class AnalysisService:
         """
         # O(n * m) where n = pages, m = max items per page
         pages: list[dict] = []
-        all_emails: set[str] = set()
-        all_phones: set[str] = set()
-        all_social_links: set[str] = set()
+        # all_emails: set[str] = set()
+        # all_phones: set[str] = set()
+        # all_social_links: set[str] = set()
         successful = 0
         failed = 0
 
@@ -524,9 +530,9 @@ class AnalysisService:
 
                 # Accumulate leads for deduplication
                 leads = result.insights.get("leads", {})
-                all_emails.update(leads.get("emails", []))
-                all_phones.update(leads.get("phones", []))
-                all_social_links.update(leads.get("social_links", []))
+                # all_emails.update(leads.get("emails", []))
+                # all_phones.update(leads.get("phones", []))
+                # all_social_links.update(leads.get("social_links", []))
                 successful += 1
             else:
                 page_entry["error"] = result.error
@@ -540,9 +546,9 @@ class AnalysisService:
                 "total_pages": len(results),
                 "successful_pages": successful,
                 "failed_pages": failed,
-                "all_emails": sorted(all_emails),
-                "all_phones": sorted(all_phones),
-                "all_social_links": sorted(all_social_links),
+                # "all_emails": sorted(all_emails),
+                # "all_phones": sorted(all_phones),
+                # "all_social_links": sorted(all_social_links),
             },
         }
 

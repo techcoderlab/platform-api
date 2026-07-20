@@ -62,12 +62,12 @@ def _to_job_response(result: AnalysisResult) -> JobStatusResponse:
             url=s.url,
             final_url=s.final_url,
             status_code=s.status_code,
-            captured_at=s.captured_at
-            # title=s.title,
-            # meta=s.meta,
-            # link_count=len(s.links),
-            # text_length=len(s.text),
-            # has_screenshot=len(s.screenshots) > 0,
+            captured_at=s.captured_at,
+            title=s.title,
+            meta=s.meta,
+            link_count=len(s.links),
+            text_length=len(s.text),
+            has_screenshot=len(s.screenshots) > 0,
         )
 
     return JobStatusResponse(
