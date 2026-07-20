@@ -74,18 +74,14 @@ class PageSnapshotResponse(BaseModel):
     Lightweight snapshot summary. 
     Heavy data (content, meta) is shifted to the insights dictionary.
     """
-    # url: str
-    # final_url: str
-    # status_code: int
-    # title: str
-    # meta: dict[str, str]
-    # link_count: int
-    # text_length: int
-    # has_screenshot: bool
-    # captured_at: datetime
     url: str
     final_url: str
     status_code: int
+    title: str
+    meta: dict[str, str]
+    link_count: int
+    text_length: int
+    has_screenshot: bool
     captured_at: datetime
 
 
@@ -230,6 +226,7 @@ class BatchPageResult(BaseModel):
     seo: dict[str, Any] = Field(default_factory=dict)
     content: dict[str, Any] = Field(default_factory=dict)
     leads: dict[str, Any] = Field(default_factory=dict)
+    pitch_hooks: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
 
 
@@ -237,9 +234,9 @@ class BatchSummary(BaseModel):
     total_pages: int
     successful_pages: int
     failed_pages: int
-    # all_emails: list[str] = Field(default_factory=list)
-    # all_phones: list[str] = Field(default_factory=list)
-    # all_social_links: list[str] = Field(default_factory=list)
+    all_emails: list[str] = Field(default_factory=list)
+    all_phones: list[str] = Field(default_factory=list)
+    all_social_links: list[str] = Field(default_factory=list)
 
 
 class BatchStatusResponse(BaseModel):

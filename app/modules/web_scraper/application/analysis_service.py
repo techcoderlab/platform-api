@@ -25,6 +25,7 @@ from app.modules.web_scraper.domain.models import (
 from app.modules.web_scraper.domain.ports import AnalysisRepository, BatchRepository, BrowserPort
 from app.modules.web_scraper.application.task_queue import TaskQueue
 from app.modules.web_scraper.application.extractor_utils import DataExtractor, LinkExtractor, FormExtractor, CTAExtractor
+from app.modules.web_scraper.application.pitch_extractor import B2BPitchExtractor
 
 from app.core.logging import get_logger
 log = get_logger(__name__)
@@ -173,40 +174,10 @@ class AnalysisService:
     @staticmethod
     def _extract_insights(snapshot: PageSnapshot) -> dict:
         """
-        Optimized for AI/LLM pipelines. 
-        Strips unnecessary SEO metrics and returns pure actionable data.
+        Optimized for AI/LLM pipelines.
+        Delegates to B2BPitchExtractor to isolate logic for B2B growth strategists.
         """
-        
-        cleaned_text = re.sub(r'\n\s*\n', '\n\n', snapshot.text.strip())
-
-        # Raw safety cap — for storage/debugging only, NOT sent to the LLM
-        MAX_RAW_CHARS = 15000
-        final_text = (
-            cleaned_text[:MAX_RAW_CHARS] + '.. [Content Truncated]'
-            if len(cleaned_text) > MAX_RAW_CHARS else cleaned_text
-        )
-        
-        base_insights = {
-            "seo": { 
-                "title": snapshot.title,
-                "description": snapshot.meta.get("description") or snapshot.meta.get("og:description") or "" 
-            },
-            "content": { 
-                "text": final_text,
-                # Convert each byte string to a clean base64 string
-                "screenshots": [base64.b64encode(s).decode("utf-8") for s in snapshot.screenshots]
-            }
-        }
-        
-        base_insights["leads"] = {
-            "forms": FormExtractor.extract_forms(snapshot.html),
-            "ctas": CTAExtractor.extract_ctas(snapshot.html),
-            "emails": DataExtractor.find_emails(snapshot.html),
-            "phones": DataExtractor.find_contacts(snapshot.html),
-            "social_links": LinkExtractor.find_social_links(snapshot.links),
-        }
-        
-        return base_insights
+        return B2BPitchExtractor.extract(snapshot)
         
     # @staticmethod
     # def _extract_insights(snapshot: PageSnapshot) -> dict:
@@ -511,9 +482,9 @@ class AnalysisService:
         """
         # O(n * m) where n = pages, m = max items per page
         pages: list[dict] = []
-        # all_emails: set[str] = set()
-        # all_phones: set[str] = set()
-        # all_social_links: set[str] = set()
+        all_emails: set[str] = set()
+        all_phones: set[str] = set()
+        all_social_links: set[str] = set()
         successful = 0
         failed = 0
 
@@ -529,12 +500,13 @@ class AnalysisService:
                 page_entry["seo"] = result.insights.get("seo", {})
                 page_entry["content"] = result.insights.get("content", {})
                 page_entry["leads"] = result.insights.get("leads", {})
+                page_entry["pitch_hooks"] = result.insights.get("pitch_hooks", {})
 
                 # Accumulate leads for deduplication
-                # leads = result.insights.get("leads", {})
-                # all_emails.update(leads.get("emails", []))
-                # all_phones.update(leads.get("phones", []))
-                # all_social_links.update(leads.get("social_links", []))
+                leads = result.insights.get("leads", {})
+                all_emails.update(leads.get("emails", []))
+                all_phones.update(leads.get("phones", []))
+                all_social_links.update(leads.get("social_links", []))
                 successful += 1
             else:
                 page_entry["error"] = result.error
@@ -548,9 +520,9 @@ class AnalysisService:
                 "total_pages": len(results),
                 "successful_pages": successful,
                 "failed_pages": failed,
-                # "all_emails": sorted(all_emails),
-                # "all_phones": sorted(all_phones),
-                # "all_social_links": sorted(all_social_links),
+                "all_emails": sorted(all_emails),
+                "all_phones": sorted(all_phones),
+                "all_social_links": sorted(all_social_links),
             },
         }
 
