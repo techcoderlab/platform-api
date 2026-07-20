@@ -13,6 +13,7 @@ import asyncio
 import time
 import re
 import random
+import base64
 from collections import Counter
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -192,7 +193,8 @@ class AnalysisService:
             },
             "content": { 
                 "text": final_text,
-                "screenshots": snapshot.screenshots
+                # Convert each byte string to a clean base64 string
+                "screenshots": [base64.b64encode(s).decode("utf-8") for s in snapshot.screenshots]
             }
         }
         
@@ -529,7 +531,7 @@ class AnalysisService:
                 page_entry["leads"] = result.insights.get("leads", {})
 
                 # Accumulate leads for deduplication
-                leads = result.insights.get("leads", {})
+                # leads = result.insights.get("leads", {})
                 # all_emails.update(leads.get("emails", []))
                 # all_phones.update(leads.get("phones", []))
                 # all_social_links.update(leads.get("social_links", []))
