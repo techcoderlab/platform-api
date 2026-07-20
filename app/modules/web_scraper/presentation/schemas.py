@@ -136,3 +136,124 @@ class ErrorResponse(BaseModel):
         default=None,
         description="Optional structured error details.",
     )
+
+
+# ── Batch Request/Response DTOs ───────────────────────────────────────────────
+
+class BatchAnalyzeRequest(BaseModel):
+    """Inbound request to submit multiple URLs for batch analysis."""
+
+    urls: list[HttpUrl] = Field(
+        ...,
+        min_length=1,
+        max_length=5,
+        description="List of target URLs to scrape (max 5).",
+        examples=[["https://example.com/page1", "https://example.com/page2"]],
+    )
+    wait_selector: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Optional CSS selector to wait for on each page before extracting content.",
+    )
+    session_id: str | None = Field(
+        default=None,
+        description="Optional shared session ID. Auto-generated if omitted.",
+    )
+    allow_mixed_domains: bool = Field(
+        default=False,
+        description="If false, enforces that all URLs belong to the same domain.",
+    )
+    page_delay_min: float = Field(
+        default=1.0,
+        ge=0.0,
+        description="Minimum delay in seconds between page navigations.",
+    )
+    page_delay_max: float = Field(
+        default=3.0,
+        ge=0.0,
+        description="Maximum delay in seconds between page navigations.",
+    )
+
+    @field_validator("wait_selector")
+    @classmethod
+    def sanitize_wait_selector(cls, v: str | None) -> str | None:
+        """Reject selectors containing script injection vectors."""
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            return None
+        forbidden = ("<", ">", "javascript:", "onclick", "onerror")
+        lower = v.lower()
+        for token in forbidden:
+            if token in lower:
+                raise ValueError(f"Selector contains forbidden token: {token!r}")
+        return v
+
+    from pydantic import model_validator
+    @model_validator(mode="after")
+    def validate_batch_rules(self) -> BatchAnalyzeRequest:
+        # Validate delays
+        if self.page_delay_min > self.page_delay_max:
+            raise ValueError("page_delay_min cannot be greater than page_delay_max.")
+            
+        # Validate same domain if not allowed mixed
+        if not self.allow_mixed_domains and len(self.urls) > 1:
+            from urllib.parse import urlparse
+            def _get_domain(url: HttpUrl) -> str:
+                netloc = urlparse(str(url)).netloc.lower()
+                return netloc[4:] if netloc.startswith("www.") else netloc
+                
+            first_domain = _get_domain(self.urls[0])
+            for url in self.urls[1:]:
+                domain = _get_domain(url)
+                if domain != first_domain:
+                    raise ValueError(
+                        f"Mixed domains are not allowed unless allow_mixed_domains is true. "
+                        f"Found {domain}, expected {first_domain}."
+                    )
+        return self
+
+
+class BatchAnalyzeResponse(BaseModel):
+    batch_id: str = Field(..., description="Unique batch job identifier for polling.")
+    status: str = Field(..., description="Initial job status (always 'pending').")
+    poll_url: str = Field(..., description="URL to poll for batch job status and results.")
+
+
+class BatchPageResult(BaseModel):
+    """Summarized result of a single page within a batch."""
+    url: str
+    status: str
+    duration_ms: float
+    job_id: str
+    seo: dict[str, Any] = Field(default_factory=dict)
+    content: dict[str, Any] = Field(default_factory=dict)
+    leads: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+
+
+class BatchSummary(BaseModel):
+    total_pages: int
+    successful_pages: int
+    failed_pages: int
+    all_emails: list[str] = Field(default_factory=list)
+    all_phones: list[str] = Field(default_factory=list)
+    all_social_links: list[str] = Field(default_factory=list)
+
+
+class BatchStatusResponse(BaseModel):
+    batch_id: str
+    status: str
+    urls: list[str]
+    session_id: str
+    pages: list[BatchPageResult] = Field(default_factory=list)
+    summary: BatchSummary | None = None
+    error: str | None = None
+    total_duration_ms: float = 0.0
+    created_at: datetime
+
+
+class BatchListResponse(BaseModel):
+    count: int = Field(..., description="Number of results returned.")
+    batches: list[BatchStatusResponse]

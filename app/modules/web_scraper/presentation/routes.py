@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 from app.modules.web_scraper.application.analysis_service import AnalysisService
 from app.modules.web_scraper.application.task_queue import QueueFullError
-from app.modules.web_scraper.domain.models import AnalysisResult, AnalysisStatus
+from app.modules.web_scraper.domain.models import AnalysisResult, AnalysisStatus, BatchResult, BatchStatus
 from app.modules.web_scraper.presentation.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
@@ -25,6 +25,12 @@ from app.modules.web_scraper.presentation.schemas import (
     JobStatusResponse,
     PageSnapshotResponse,
     ReadinessResponse,
+    BatchAnalyzeRequest,
+    BatchAnalyzeResponse,
+    BatchStatusResponse,
+    BatchListResponse,
+    BatchPageResult,
+    BatchSummary,
 )
 
 from app.core.logging import get_logger
@@ -56,12 +62,12 @@ def _to_job_response(result: AnalysisResult) -> JobStatusResponse:
             url=s.url,
             final_url=s.final_url,
             status_code=s.status_code,
-            title=s.title,
-            meta=s.meta,
-            link_count=len(s.links),
-            text_length=len(s.text),
-            has_screenshot=len(s.screenshots) > 0,
-            captured_at=s.captured_at,
+            captured_at=s.captured_at
+            # title=s.title,
+            # meta=s.meta,
+            # link_count=len(s.links),
+            # text_length=len(s.text),
+            # has_screenshot=len(s.screenshots) > 0,
         )
 
     return JobStatusResponse(
@@ -72,6 +78,48 @@ def _to_job_response(result: AnalysisResult) -> JobStatusResponse:
         insights=result.insights,
         error=result.error,
         duration_ms=result.duration_ms,
+        created_at=result.created_at,
+    )
+
+
+def _to_batch_response(result: BatchResult) -> BatchStatusResponse:
+    """Map domain BatchResult to presentation BatchStatusResponse."""
+    summary_dto = None
+    if result.compiled_insights.get("summary"):
+        s = result.compiled_insights["summary"]
+        summary_dto = BatchSummary(
+            total_pages=s["total_pages"],
+            successful_pages=s["successful_pages"],
+            failed_pages=s["failed_pages"],
+            all_emails=s["all_emails"],
+            all_phones=s["all_phones"],
+            all_social_links=s["all_social_links"],
+        )
+
+    pages = []
+    for page in result.compiled_insights.get("pages", []):
+        pages.append(
+            BatchPageResult(
+                url=page["url"],
+                status=page["status"],
+                duration_ms=page["duration_ms"],
+                job_id=page["job_id"],
+                seo=page.get("seo", {}),
+                content=page.get("content", {}),
+                leads=page.get("leads", {}),
+                error=page.get("error"),
+            )
+        )
+
+    return BatchStatusResponse(
+        batch_id=result.batch_id,
+        status=result.status.value,
+        urls=result.urls,
+        session_id=result.session_id,
+        pages=pages,
+        summary=summary_dto,
+        error=result.error,
+        total_duration_ms=result.total_duration_ms,
         created_at=result.created_at,
     )
 
@@ -209,6 +257,118 @@ async def list_jobs(
     return JobListResponse(
         count=len(results),
         jobs=[_to_job_response(r) for r in results],
+    )
+
+
+# ── Batch Analysis endpoints ──────────────────────────────────────────────────
+
+@router.post(
+    "/analyze/batch",
+    response_model=BatchAnalyzeResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        429: {"model": ErrorResponse, "description": "Queue at capacity"},
+        422: {"model": ErrorResponse, "description": "Validation error"},
+    },
+    summary="Submit multiple URLs for batch analysis",
+    description="Enqueues a background batch scraping job for 1-5 same-site URLs.",
+)
+async def submit_batch_analysis(body: BatchAnalyzeRequest, request: Request) -> BatchAnalyzeResponse:
+    """Accept a list of URLs, validate, enqueue for background batch analysis.
+
+    Args:
+        body: Validated BatchAnalyzeRequest DTO.
+        request: FastAPI request (carries app.state).
+
+    Returns:
+        BatchAnalyzeResponse with batch_id and poll URL.
+
+    Raises:
+        HTTPException 429: When task queue is full.
+    """
+    service = _get_service(request)
+
+    try:
+        batch_id = await service.submit_batch(
+            urls=[str(url) for url in body.urls],
+            wait_selector=body.wait_selector,
+            session_id=body.session_id,
+            page_delay_min=body.page_delay_min,
+            page_delay_max=body.page_delay_max,
+        )
+    except QueueFullError as exc:
+        log.warning("batch_queue_full_rejection", extra={"urls": [str(u) for u in body.urls]})
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+        ) from exc
+
+    poll_url = f"/batches/{batch_id}"
+    return BatchAnalyzeResponse(
+        batch_id=batch_id,
+        status=BatchStatus.PENDING.value,
+        poll_url=poll_url,
+    )
+
+
+@router.get(
+    "/batches/{batch_id}",
+    response_model=BatchStatusResponse,
+    responses={404: {"model": ErrorResponse, "description": "Batch not found"}},
+    summary="Get batch analysis status",
+    description="Retrieve the current status and results of a batch analysis job.",
+)
+async def get_batch_status(batch_id: str, request: Request) -> BatchStatusResponse:
+    """Look up a single batch job by ID.
+
+    Args:
+        batch_id: Unique batch identifier from submission.
+        request: FastAPI request.
+
+    Returns:
+        Full batch status with summarized page results.
+
+    Raises:
+        HTTPException 404: When batch_id does not exist.
+    """
+    service = _get_service(request)
+    result = await service.get_batch(batch_id)
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Batch {batch_id!r} not found.",
+        )
+
+    return _to_batch_response(result)
+
+
+@router.get(
+    "/batches",
+    response_model=BatchListResponse,
+    summary="List recent batch analysis jobs",
+    description="Returns the most recent batch jobs, newest first.",
+)
+async def list_batches(
+    request: Request,
+    limit: int = 50,
+) -> BatchListResponse:
+    """Paginated listing of recent batches.
+
+    Args:
+        request: FastAPI request.
+        limit: Max results (capped at 100 server-side).
+
+    Returns:
+        BatchListResponse with count and batch list.
+    """
+    capped_limit = min(limit, 100)
+    service = _get_service(request)
+    results = await service.list_batches(limit=capped_limit)
+
+    return BatchListResponse(
+        count=len(results),
+        batches=[_to_batch_response(r) for r in results],
     )
 
 

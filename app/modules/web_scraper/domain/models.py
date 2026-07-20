@@ -37,3 +37,44 @@ class AnalysisResult:
     error:       str | None                 = None
     duration_ms: float                      = 0.0
     created_at:  datetime                   = field(default_factory=datetime.utcnow)
+
+
+class BatchStatus(str, Enum):
+    """Lifecycle states for a multi-page batch scraping job.
+
+    PARTIAL is unique to batches — indicates some pages succeeded, some failed.
+    """
+    PENDING   = "pending"
+    RUNNING   = "running"
+    PARTIAL   = "partial"
+    COMPLETED = "completed"
+    FAILED    = "failed"
+
+
+@dataclass
+class BatchResult:
+    """Aggregate result for a multi-page batch scraping job.
+
+    Wraps N per-page AnalysisResult objects with batch-level metadata.
+    The compiled_insights field contains merged data across all successful pages.
+
+    Attributes:
+        batch_id: Unique batch identifier for polling.
+        urls: Original list of submitted URLs.
+        status: Current batch lifecycle state.
+        session_id: Shared browser session used across all pages.
+        results: Per-page AnalysisResult objects (one per URL).
+        compiled_insights: Merged insights across all successful pages.
+        error: Batch-level error message (if entire batch failed).
+        total_duration_ms: Wall-clock time for entire batch.
+        created_at: Timestamp of batch submission.
+    """
+    batch_id:           str
+    urls:               list[str]
+    status:             BatchStatus
+    session_id:         str
+    results:            list[AnalysisResult]       = field(default_factory=list)
+    compiled_insights:  dict[str, Any]             = field(default_factory=dict)
+    error:              str | None                 = None
+    total_duration_ms:  float                      = 0.0
+    created_at:         datetime                   = field(default_factory=datetime.utcnow)

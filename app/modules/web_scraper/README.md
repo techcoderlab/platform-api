@@ -62,14 +62,43 @@ curl -X POST http://127.0.0.1:8000/analyze \
 }
 ```
 
-### 3. Poll for Results
-Use the `job_id` to check if your analysis is complete. You can poll this endpoint every few seconds.
+### 3. Submit a Batch of URLs
+Submit up to 5 URLs to be scraped sequentially within the same browser session. Great for keeping state/cookies across page navigations.
 
+```bash
+curl -X POST http://127.0.0.1:8000/analyze/batch \
+     -H "Content-Type: application/json" \
+     -d '{
+           "urls": ["https://react.dev/", "https://react.dev/learn", "https://react.dev/reference/react"],
+           "allow_mixed_domains": false,
+           "page_delay_min": 1.0,
+           "page_delay_max": 3.0
+         }'
+```
+
+**Response:**
+```json
+{
+  "batch_id": "a1b2c3d4e5f647339fadb09559aad284",
+  "status": "pending",
+  "poll_url": "/batches/a1b2c3d4e5f647339fadb09559aad284"
+}
+```
+
+### 4. Poll for Results
+Use the `job_id` or `batch_id` to check if your analysis is complete. You can poll this endpoint every few seconds.
+
+**Single Job:**
 ```bash
 curl -X GET http://127.0.0.1:8000/jobs/a1b2c3d4e5f647339fadb09559aad284
 ```
 
-**Successful Response (Once Completed):**
+**Batch Job:**
+```bash
+curl -X GET http://127.0.0.1:8000/batches/a1b2c3d4e5f647339fadb09559aad284
+```
+
+**Successful Single Response (Once Completed):**
 ```json
 {
   "job_id": "a1b2c3d4e5f647339fadb09559aad284",
@@ -97,8 +126,12 @@ curl -X GET http://127.0.0.1:8000/jobs/a1b2c3d4e5f647339fadb09559aad284
 }
 ```
 
-### 4. List Recent Jobs
+### 5. List Recent Jobs
 See an overview of the last 50 scraping jobs processed by the system.
 ```bash
+# Single jobs
 curl -X GET http://127.0.0.1:8000/jobs?limit=5
+
+# Batch jobs
+curl -X GET http://127.0.0.1:8000/batches?limit=5
 ```

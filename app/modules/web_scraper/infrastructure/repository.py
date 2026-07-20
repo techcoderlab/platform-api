@@ -12,8 +12,8 @@ from collections import OrderedDict
 from copy import deepcopy
 
 
-from app.modules.web_scraper.domain.models import AnalysisResult
-from app.modules.web_scraper.domain.ports import AnalysisRepository
+from app.modules.web_scraper.domain.models import AnalysisResult, BatchResult
+from app.modules.web_scraper.domain.ports import AnalysisRepository, BatchRepository
 
 from app.core.logging import get_logger
 log = get_logger(__name__)
@@ -95,6 +95,82 @@ class InMemoryAnalysisRepository(AnalysisRepository):
 
         Returns:
             List of deep-copied AnalysisResult, newest first.
+        """
+        async with self._lock:
+            # Iterate in reverse insertion order (newest last in OrderedDict)
+            items = list(self._store.values())
+
+        # Sort by created_at descending — O(n log n)
+        items.sort(key=lambda r: r.created_at, reverse=True)
+        return [deepcopy(item) for item in items[:limit]]
+
+
+class InMemoryBatchRepository(BatchRepository):
+    """Thread-safe, LRU-bounded in-memory implementation of BatchRepository.
+
+    Mirrors InMemoryAnalysisRepository pattern for batch job persistence.
+    Stores deep copies to prevent callers from mutating repository state.
+    Protected by asyncio.Lock for single-event-loop safety (Pillar 3).
+
+    Args:
+        max_entries: Maximum batch results to retain before LRU eviction.
+    """
+
+    # Shared mutable state: _store (OrderedDict)
+    # Protection strategy: asyncio.Lock — single event-loop, no cross-thread access.
+
+    def __init__(self, max_entries: int = MAX_ENTRIES) -> None:
+        self._store: OrderedDict[str, BatchResult] = OrderedDict()
+        self._lock = asyncio.Lock()
+        self._max_entries = max_entries
+
+    async def save(self, batch: BatchResult) -> None:
+        """Persist or update a BatchResult by batch_id.
+
+        Args:
+            batch: The BatchResult to store (deep-copied).
+
+        Side effects:
+            Evicts oldest entry when capacity exceeded (LRU).
+        """
+        async with self._lock:
+            # MUTATION: insert / update store entry
+            self._store[batch.batch_id] = deepcopy(batch)
+            # Move to end (most-recently-used)
+            self._store.move_to_end(batch.batch_id)
+            # Evict LRU entries if over capacity — O(1) per eviction
+            while len(self._store) > self._max_entries:
+                evicted_key, _ = self._store.popitem(last=False)
+                log.debug("batch_lru_eviction", extra={"evicted_batch_id": evicted_key})
+
+        log.debug("batch_saved", extra={"batch_id": batch.batch_id, "status": batch.status.value})
+
+    async def get(self, batch_id: str) -> BatchResult | None:
+        """Retrieve a BatchResult by batch_id.
+
+        Args:
+            batch_id: Unique batch identifier.
+
+        Returns:
+            Deep copy of the stored batch, or None if not found.
+        """
+        async with self._lock:
+            batch = self._store.get(batch_id)
+            if batch is None:
+                return None
+            # Move to end on access (LRU touch)
+            self._store.move_to_end(batch_id)
+            return deepcopy(batch)
+
+    # O(n log n) time due to sort, O(n) space for the slice
+    async def list_recent(self, limit: int = 50) -> list[BatchResult]:
+        """Return the most recent batch results, ordered by created_at desc.
+
+        Args:
+            limit: Maximum number of results to return.
+
+        Returns:
+            List of deep-copied BatchResult, newest first.
         """
         async with self._lock:
             # Iterate in reverse insertion order (newest last in OrderedDict)

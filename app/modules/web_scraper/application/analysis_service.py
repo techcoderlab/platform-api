@@ -9,15 +9,19 @@
 # ─────────────────────────────────────────────────────
 from __future__ import annotations
 
+import asyncio
 import time
 import re
+import random
 from collections import Counter
 from urllib.parse import urlparse
 from uuid import uuid4
 
 
-from app.modules.web_scraper.domain.models import AnalysisResult, AnalysisStatus, PageSnapshot
-from app.modules.web_scraper.domain.ports import AnalysisRepository, BrowserPort
+from app.modules.web_scraper.domain.models import (
+    AnalysisResult, AnalysisStatus, BatchResult, BatchStatus, PageSnapshot,
+)
+from app.modules.web_scraper.domain.ports import AnalysisRepository, BatchRepository, BrowserPort
 from app.modules.web_scraper.application.task_queue import TaskQueue
 from app.modules.web_scraper.application.extractor_utils import DataExtractor, LinkExtractor
 
@@ -30,12 +34,13 @@ log = get_logger(__name__)
 class AnalysisService:
     """Orchestrates web-page analysis: submit -> enqueue -> scrape -> persist.
 
-    Depends on abstractions only (BrowserPort, AnalysisRepository) per Pillar 1
-    Dependency Inversion. Never instantiates infrastructure directly.
+    Depends on abstractions only (BrowserPort, AnalysisRepository, BatchRepository)
+    per Pillar 1 Dependency Inversion. Never instantiates infrastructure directly.
 
     Args:
         browser: BrowserPort implementation for page fetching.
-        repository: AnalysisRepository implementation for persistence.
+        repository: AnalysisRepository implementation for single-job persistence.
+        batch_repository: BatchRepository implementation for batch-job persistence.
         queue: TaskQueue for async background processing.
     """
 
@@ -43,10 +48,12 @@ class AnalysisService:
         self,
         browser: BrowserPort,
         repository: AnalysisRepository,
+        batch_repository: BatchRepository,
         queue: TaskQueue,
     ) -> None:
         self._browser = browser
         self._repo = repository
+        self._batch_repo = batch_repository
         self._queue = queue
 
     async def submit_analysis(
@@ -268,4 +275,274 @@ class AnalysisService:
     #             "has_screenshot": len(snapshot.screenshots) > 0,
     #         },
     #     }
+
+    # ── Batch analysis methods ─────────────────────────────────────────────────
+
+    async def submit_batch(
+        self,
+        urls: list[str],
+        wait_selector: str | None = None,
+        session_id: str | None = None,
+        page_delay_min: float = 1.0,
+        page_delay_max: float = 3.0,
+    ) -> str:
+        """Create a pending batch job and enqueue for background processing.
+
+        All URLs are scraped sequentially within a single browser session to
+        maintain cookie/state continuity (real-user behavior simulation).
+
+        Args:
+            urls: List of target URLs (1-5, validated at presentation layer).
+            wait_selector: Optional CSS selector to await on each page.
+            session_id: Optional session identifier. Auto-generated if omitted.
+            page_delay_min: Minimum seconds to wait between page navigations.
+            page_delay_max: Maximum seconds to wait between page navigations.
+
+        Returns:
+            Unique batch_id string for status polling.
+
+        Raises:
+            QueueFullError: Propagated from TaskQueue when at capacity.
+        """
+        batch_id = uuid4().hex
+        effective_session_id = session_id or f"batch_{batch_id}"
+
+        # MUTATION: create initial pending batch result
+        batch = BatchResult(
+            batch_id=batch_id,
+            urls=urls,
+            status=BatchStatus.PENDING,
+            session_id=effective_session_id,
+        )
+        await self._batch_repo.save(batch)
+
+        # Enqueue background work — raises QueueFullError if full (Pillar 3)
+        await self._queue.enqueue(
+            self._process_batch,
+            batch_id,
+            urls,
+            wait_selector,
+            effective_session_id,
+            page_delay_min,
+            page_delay_max,
+        )
+
+        log.info(
+            "batch_submitted",
+            extra={"batch_id": batch_id, "url_count": len(urls), "session_id": effective_session_id},
+        )
+        return batch_id
+
+    async def get_batch(self, batch_id: str) -> BatchResult | None:
+        """Retrieve a single batch result by batch_id.
+
+        Args:
+            batch_id: Unique batch identifier.
+
+        Returns:
+            BatchResult or None if not found.
+        """
+        return await self._batch_repo.get(batch_id)
+
+    async def list_batches(self, limit: int = 50) -> list[BatchResult]:
+        """List recent batch results ordered by creation time descending.
+
+        Args:
+            limit: Maximum number of results to return.
+
+        Returns:
+            List of BatchResult, newest first.
+        """
+        return await self._batch_repo.list_recent(limit=limit)
+
+    # ── Batch background worker callback ───────────────────────────────────────
+
+    async def _process_batch(
+        self,
+        batch_id: str,
+        urls: list[str],
+        wait_selector: str | None,
+        session_id: str,
+        page_delay_min: float,
+        page_delay_max: float,
+    ) -> None:
+        """Execute the scraping + analysis pipeline for a batch of URLs.
+
+        Scrapes each URL sequentially within the same browser session to
+        maintain cookie/state continuity. Individual page failures do not
+        abort the batch — partial results are captured (Pillar 6).
+
+        Args:
+            batch_id: Unique batch identifier.
+            urls: Target URLs to scrape.
+            wait_selector: Optional CSS selector to await on each page.
+            session_id: Shared browser session identifier.
+            page_delay_min: Minimum inter-page delay seconds.
+            page_delay_max: Maximum inter-page delay seconds.
+        """
+        # MUTATION: transition to RUNNING
+        batch = await self._batch_repo.get(batch_id)
+        if batch is None:
+            log.error("batch_not_found_for_processing", extra={"batch_id": batch_id})
+            return
+
+        batch.status = BatchStatus.RUNNING
+        await self._batch_repo.save(batch)
+        log.info("batch_running", extra={"batch_id": batch_id, "url_count": len(urls)})
+
+        t0 = time.monotonic()
+        page_results: list[AnalysisResult] = []
+        success_count = 0
+        fail_count = 0
+
+        for idx, url in enumerate(urls):
+            page_job_id = f"{batch_id}_page_{idx}"
+            log.info(
+                "batch_page_start",
+                extra={"batch_id": batch_id, "page_index": idx, "url": url, "page_job_id": page_job_id},
+            )
+
+            page_result = AnalysisResult(
+                job_id=page_job_id,
+                url=url,
+                status=AnalysisStatus.RUNNING,
+            )
+
+            try:
+                page_t0 = time.monotonic()
+                # DRY reuse: same BrowserPort.fetch() with shared session_id
+                snapshot = await self._browser.fetch(
+                    url, wait_selector=wait_selector, session_id=session_id,
+                )
+                page_elapsed_ms = (time.monotonic() - page_t0) * 1000
+
+                # DRY reuse: same _extract_insights() as single-page pipeline
+                page_result.snapshot = snapshot
+                page_result.insights = self._extract_insights(snapshot)
+                page_result.duration_ms = round(page_elapsed_ms, 2)
+                page_result.status = AnalysisStatus.COMPLETED
+                success_count += 1
+
+                log.info(
+                    "batch_page_completed",
+                    extra={"batch_id": batch_id, "page_index": idx, "duration_ms": page_result.duration_ms},
+                )
+
+            except Exception as exc:
+                page_result.status = AnalysisStatus.FAILED
+                page_result.error = f"{type(exc).__name__}: {exc}"
+                fail_count += 1
+
+                log.error(
+                    "batch_page_failed",
+                    extra={
+                        "batch_id": batch_id,
+                        "page_index": idx,
+                        "error_class": type(exc).__name__,
+                        "error": str(exc),
+                    },
+                    exc_info=True,
+                )
+
+            page_results.append(page_result)
+            # Also persist each page individually so /jobs/{job_id} works
+            await self._repo.save(page_result)
+
+            # Human behavior: delay between page navigations (skip after last page)
+            if idx < len(urls) - 1:
+                delay = random.uniform(page_delay_min, page_delay_max)
+                log.debug(
+                    "batch_inter_page_delay",
+                    extra={"batch_id": batch_id, "delay_seconds": round(delay, 2)},
+                )
+                await asyncio.sleep(delay)
+
+        total_elapsed_ms = (time.monotonic() - t0) * 1000
+
+        # Determine batch status: COMPLETED | PARTIAL | FAILED
+        if fail_count == 0:
+            batch_status = BatchStatus.COMPLETED
+        elif success_count > 0:
+            batch_status = BatchStatus.PARTIAL
+        else:
+            batch_status = BatchStatus.FAILED
+
+        # MUTATION: finalize batch result
+        batch.results = page_results
+        batch.compiled_insights = self._compile_batch_insights(page_results)
+        batch.total_duration_ms = round(total_elapsed_ms, 2)
+        batch.status = batch_status
+
+        await self._batch_repo.save(batch)
+
+        log.info(
+            "batch_completed",
+            extra={
+                "batch_id": batch_id,
+                "status": batch_status.value,
+                "success_count": success_count,
+                "fail_count": fail_count,
+                "total_duration_ms": batch.total_duration_ms,
+            },
+        )
+
+    # ── Batch insight compilation (pure, CPU-light) ────────────────────────────
+
+    @staticmethod
+    def _compile_batch_insights(results: list[AnalysisResult]) -> dict:
+        """Merge per-page insights into a consolidated batch summary.
+
+        Deduplicates leads (emails, phones, social links) across all pages.
+        Each page's insights are preserved individually in the 'pages' list.
+
+        Args:
+            results: List of per-page AnalysisResult objects.
+
+        Returns:
+            Dictionary with 'pages' (per-page detail) and 'summary' (aggregated).
+        """
+        # O(n * m) where n = pages, m = max items per page
+        pages: list[dict] = []
+        all_emails: set[str] = set()
+        all_phones: set[str] = set()
+        all_social_links: set[str] = set()
+        successful = 0
+        failed = 0
+
+        for result in results:
+            page_entry: dict = {
+                "url": result.url,
+                "status": result.status.value,
+                "duration_ms": result.duration_ms,
+                "job_id": result.job_id,
+            }
+
+            if result.status == AnalysisStatus.COMPLETED and result.insights:
+                page_entry["seo"] = result.insights.get("seo", {})
+                page_entry["content"] = result.insights.get("content", {})
+                page_entry["leads"] = result.insights.get("leads", {})
+
+                # Accumulate leads for deduplication
+                leads = result.insights.get("leads", {})
+                all_emails.update(leads.get("emails", []))
+                all_phones.update(leads.get("phones", []))
+                all_social_links.update(leads.get("social_links", []))
+                successful += 1
+            else:
+                page_entry["error"] = result.error
+                failed += 1
+
+            pages.append(page_entry)
+
+        return {
+            "pages": pages,
+            "summary": {
+                "total_pages": len(results),
+                "successful_pages": successful,
+                "failed_pages": failed,
+                "all_emails": sorted(all_emails),
+                "all_phones": sorted(all_phones),
+                "all_social_links": sorted(all_social_links),
+            },
+        }
 

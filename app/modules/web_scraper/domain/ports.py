@@ -1,7 +1,7 @@
 # ── Domain Ports: ABCs that Infrastructure must implement ────────────────────
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from app.modules.web_scraper.domain.models import PageSnapshot, AnalysisResult
+from app.modules.web_scraper.domain.models import PageSnapshot, AnalysisResult, BatchResult
 from typing import Protocol, Dict, Any, Optional
 
 class BrowserPort(ABC):
@@ -38,3 +38,16 @@ class SessionStorePort(Protocol):
     async def save_state(self, session_id: str, state: Dict[str, Any], ttl_seconds: int = 300) -> None:
         """Save session state with an expiry time (TTL)."""
         ...
+
+
+class BatchRepository(ABC):
+    """Persist / retrieve BatchResult (swap Redis, Postgres, in-mem)."""
+
+    @abstractmethod
+    async def save(self, batch: BatchResult) -> None: ...
+
+    @abstractmethod
+    async def get(self, batch_id: str) -> BatchResult | None: ...
+
+    @abstractmethod
+    async def list_recent(self, limit: int = 50) -> list[BatchResult]: ...

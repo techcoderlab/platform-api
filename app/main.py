@@ -19,7 +19,7 @@ from app.modules.image_factory.routes import router as image_factory_router
 from app.modules.web_scraper.infrastructure.session_store import InMemorySessionStore
 from app.modules.web_scraper.infrastructure.browser_pool import BrowserPool
 from app.modules.web_scraper.infrastructure.scraper import PlaywrightScraper
-from app.modules.web_scraper.infrastructure.repository import InMemoryAnalysisRepository
+from app.modules.web_scraper.infrastructure.repository import InMemoryAnalysisRepository, InMemoryBatchRepository
 from app.modules.web_scraper.application.task_queue import TaskQueue
 from app.modules.web_scraper.application.analysis_service import AnalysisService
 from app.modules.web_scraper.presentation.routes import router as web_scraper_router
@@ -43,6 +43,7 @@ async def lifespan(app: FastAPI):
 
         scraper = PlaywrightScraper(pool=browser_pool)
         repository = InMemoryAnalysisRepository()
+        batch_repository = InMemoryBatchRepository()
 
         task_queue = TaskQueue(
             max_size=settings.MAX_QUEUE_SIZE,
@@ -53,6 +54,7 @@ async def lifespan(app: FastAPI):
         analysis_service = AnalysisService(
             browser=scraper,
             repository=repository,
+            batch_repository=batch_repository,
             queue=task_queue,
         )
 
