@@ -237,9 +237,9 @@ class BatchSummary(BaseModel):
     total_pages: int
     successful_pages: int
     failed_pages: int
-    all_emails: list[str] = Field(default_factory=list)
-    all_phones: list[str] = Field(default_factory=list)
-    all_social_links: list[str] = Field(default_factory=list)
+    # all_emails: list[str] = Field(default_factory=list)
+    # all_phones: list[str] = Field(default_factory=list)
+    # all_social_links: list[str] = Field(default_factory=list)
 
 
 class BatchStatusResponse(BaseModel):

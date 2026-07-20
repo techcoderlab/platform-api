@@ -91,9 +91,9 @@ def _to_batch_response(result: BatchResult) -> BatchStatusResponse:
             total_pages=s["total_pages"],
             successful_pages=s["successful_pages"],
             failed_pages=s["failed_pages"],
-            all_emails=s["all_emails"],
-            all_phones=s["all_phones"],
-            all_social_links=s["all_social_links"],
+            # all_emails=s["all_emails"],
+            # all_phones=s["all_phones"],
+            # all_social_links=s["all_social_links"],
         )
 
     pages = []
