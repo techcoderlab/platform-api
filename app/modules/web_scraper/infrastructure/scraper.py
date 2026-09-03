@@ -176,7 +176,8 @@ class PlaywrightScraper(BrowserPort):
             )]
         """)
 
-        screenshot = await page.screenshot(full_page=True, type="png")
+        # Remove screenshot from this array for speed and cost efficiency
+        # screenshot = await page.screenshot(full_page=True, type="png")
 
         return PageSnapshot(
             url=url,
@@ -187,7 +188,7 @@ class PlaywrightScraper(BrowserPort):
             title=title,
             meta=meta,
             links=links,
-            screenshots=[screenshot],
+            screenshots=[], # Remove Screenshot from this array
         )
 
     async def close(self) -> None:
