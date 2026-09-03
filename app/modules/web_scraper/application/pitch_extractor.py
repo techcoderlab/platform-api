@@ -245,11 +245,11 @@ class B2BPitchExtractor:
 
         description = meta.get("description") or meta.get("og:description") or "" if isinstance(meta, dict) else ""
 
-        h1_matches = safe_cached_text("h1", lambda: cls._H1_RE.findall(html), [])
+        h1_matches = cls._safe("h1", lambda: cls._H1_RE.findall(html), [])
         h1_count = len(h1_matches)
 
-        canonical = safe_cached_text("canonical", lambda: (cls._CANONICAL_RE.search(html).group(1) if cls._CANONICAL_RE.search(html) else ""), "")
-        noindex = bool(safe_cached_text("noindex", lambda: cls._NOINDEX_RE.search(html), None))
+        canonical = cls._safe("canonical", lambda: (cls._CANONICAL_RE.search(html).group(1) if cls._CANONICAL_RE.search(html) else ""), "")
+        noindex = bool(cls._safe("noindex", lambda: cls._NOINDEX_RE.search(html), None))
         
 
         return {
