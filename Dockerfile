@@ -23,15 +23,15 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install runtime dependencies for OpenCV, Pillow, and Playwright
+# Install runtime dependencies for OpenCV, Pillow, Playwright and Wiskro (espeak-ng phonemiser)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libgl1 libglib2.0-0 chromium && \
+    apt-get install -y --no-install-recommends libgl1 libglib2.0-0 chromium libespeak-ng1 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user and setup directories
 RUN useradd -m -s /bin/bash appuser && \
-    mkdir -p /app/data/image_zips && \
+    mkdir -p /app/data/image_zips /app/data/models && \
     chown -R appuser:appuser /app
 
 # Copy installed packages from builder stage

@@ -24,6 +24,10 @@ from app.modules.web_scraper.application.task_queue import TaskQueue
 from app.modules.web_scraper.application.analysis_service import AnalysisService
 from app.modules.web_scraper.presentation.routes import router as web_scraper_router
 
+# Import speech (STT/TTS) dependencies — heavy ML libraries load lazily on first use
+from app.modules.wiskro.bootstrap import WiskroRuntime
+from app.modules.wiskro.presentation.routes import router as wiskro_router
+
 logger = get_logger(__name__)
 
 @asynccontextmanager
@@ -64,6 +68,12 @@ async def lifespan(app: FastAPI):
         app.state.analysis_service = analysis_service
         app.state.scraper = scraper
 
+    # ── Wiskro (STT/TTS) Dependencies ──
+    if settings.ENABLE_WISKRO:
+        logger.info("Initializing Wiskro dependencies")
+        app.state.wiskro = WiskroRuntime(settings)
+        await app.state.wiskro.start()
+
     app.state.settings = settings
     yield
     
@@ -78,6 +88,10 @@ async def lifespan(app: FastAPI):
         await app.state.scraper.close()
         await app.state.browser_pool.stop()
         logger.info("web_scraper shutdown complete")
+
+    if settings.ENABLE_WISKRO:
+        await app.state.wiskro.stop()
+        logger.info("wiskro shutdown complete")
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -109,7 +123,14 @@ def create_app() -> FastAPI:
             prefix=f"{settings.api_base}/web-scraper"
         )
         logger.info("Registered Web Scraper endpoints")
-    
+
+    if settings.ENABLE_WISKRO:
+        app.include_router(
+            wiskro_router,
+            prefix=f"{settings.api_base}/wiskro"
+        )
+        logger.info("Registered Wiskro endpoints")
+
     return app
 
 app = create_app()

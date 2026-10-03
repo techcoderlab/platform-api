@@ -2,3 +2,4 @@
 venv
 haier-headless-server-guide.md
 __pycache__
+deployment_machine/

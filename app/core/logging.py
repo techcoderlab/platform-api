@@ -7,6 +7,11 @@ import json
 from datetime import datetime
 from app.core.config import settings
 
+# Attributes every LogRecord carries; anything else was passed via `extra=`
+_STANDARD_RECORD_ATTRS = frozenset(
+    logging.LogRecord("", 0, "", 0, "", (), None).__dict__
+) | {"message", "asctime", "request_id"}
+
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_data = {
@@ -19,10 +24,15 @@ class JSONFormatter(logging.Formatter):
             log_data["request_id"] = record.request_id
         if record.exc_info:
             log_data["traceback"] = self.formatException(record.exc_info)
-        if hasattr(record, "extra") and isinstance(record.extra, dict):
-            log_data["context"] = record.extra
-            
-        return json.dumps(log_data)
+        # `extra={...}` kwargs land as record attributes, not as `record.extra`
+        context = {
+            key: value for key, value in record.__dict__.items()
+            if key not in _STANDARD_RECORD_ATTRS
+        }
+        if context:
+            log_data["context"] = context
+
+        return json.dumps(log_data, default=str)
 
 def setup_logging():
     level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)

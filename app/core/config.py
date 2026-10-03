@@ -48,8 +48,55 @@ class Settings(BaseSettings):
     MAX_QUEUE_SIZE: int = Field(default=100, description="Max pending analysis tasks")
     WORKER_COUNT: int = Field(default=4, description="Number of background scraper workers")
 
+    # Module: Wiskro (Whisper STT + Kokoro TTS, CPU-only ONNX/CTranslate2 inference)
+    WISKRO_MODEL_DIR: str = Field(default="/app/data/models", description="Persistent cache for STT/TTS model files")
+    WISKRO_ALLOW_DOWNLOAD: bool = Field(default=True, description="Download missing model files on demand")
+    WISKRO_PRELOAD: bool = Field(default=False, description="Load models into RAM at startup instead of on first request")
+    WISKRO_IDLE_UNLOAD_SECONDS: int = Field(default=900, ge=0, description="Unload an idle model after N seconds to free RAM (0 = never)")
+    WISKRO_MAX_PENDING: int = Field(default=8, ge=0, description="Max requests waiting per engine before rejecting with 429")
+    WISKRO_QUEUE_TIMEOUT_SECONDS: float = Field(default=120.0, gt=0, description="Max wait for an inference slot before 503")
+
+    WISKRO_STT_MODEL: str = Field(default="base.en", description="faster-whisper model size/HF repo id or local CTranslate2 directory")
+    WISKRO_STT_COMPUTE_TYPE: str = Field(default="int8", description="CTranslate2 compute type (int8 is fastest on CPU)")
+    WISKRO_STT_CPU_THREADS: int = Field(default=2, ge=0, description="Threads per STT inference (0 = all cores)")
+    WISKRO_STT_MAX_CONCURRENCY: int = Field(default=1, ge=1, description="Concurrent STT inferences")
+    WISKRO_STT_BEAM_SIZE: int = Field(default=1, ge=1, le=10, description="Beam size (1 = greedy, fastest)")
+    WISKRO_STT_DEFAULT_LANGUAGE: str = Field(default="en", description="Default language code ('' = auto-detect)")
+    WISKRO_STT_MAX_UPLOAD_MB: int = Field(default=25, ge=1, description="Max uploaded audio size")
+    WISKRO_STT_MAX_DURATION_SECONDS: int = Field(default=600, ge=1, description="Max decoded audio duration")
+    WISKRO_STT_MIN_DURATION_SECONDS: float = Field(default=0.3, ge=0, description="Noise gate: shorter clips are rejected")
+    WISKRO_STT_MIN_SPEECH_RMS: float = Field(default=0.01, ge=0, description="Noise gate: min loudness of the speech frames")
+    WISKRO_STT_MIN_SNR_DB: float = Field(default=10.0, description="Noise gate: min signal-to-noise ratio")
+    WISKRO_STT_MIN_SPEECH_BAND_RATIO: float = Field(default=0.25, ge=0, le=1, description="Noise gate: min energy share in 300-3400 Hz")
+
+    WISKRO_TTS_MODEL_URL: str = Field(
+        default="https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx",
+        description="Kokoro ONNX model download URL",
+    )
+    WISKRO_TTS_MODEL_SHA256: str = Field(
+        default="6e742170d309016e5891a994e1ce1559c702a2ccd0075e67ef7157974f6406cb",
+        description="Expected SHA-256 of the model file ('' = skip verification)",
+    )
+    WISKRO_TTS_VOICES_URL: str = Field(
+        default="https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+        description="Kokoro voices pack download URL",
+    )
+    WISKRO_TTS_VOICES_SHA256: str = Field(
+        default="bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+        description="Expected SHA-256 of the voices file ('' = skip verification)",
+    )
+    WISKRO_TTS_CPU_THREADS: int = Field(default=2, ge=0, description="Threads per TTS inference (0 = all cores)")
+    WISKRO_TTS_MAX_CONCURRENCY: int = Field(default=1, ge=1, description="Concurrent TTS inferences")
+    WISKRO_TTS_DEFAULT_VOICE: str = Field(default="am_adam", description="Voice used when a request names none")
+    WISKRO_TTS_MAX_CHARS: int = Field(default=5000, ge=1, description="Max characters per TTS request")
+    WISKRO_TTS_MP3_BITRATE_KBPS: int = Field(default=96, ge=32, le=160, description="MP3 bitrate (24 kHz MPEG-2 caps at 160)")
+    WISKRO_TTS_CACHE_MB: int = Field(default=32, ge=0, description="In-memory cache of rendered audio (0 = disabled)")
+    WISKRO_ESPEAK_LIBRARY: str = Field(default="", description="Path to libespeak-ng ('' = system library, then bundled)")
+    WISKRO_ESPEAK_DATA_PATH: str = Field(default="", description="Path to espeak-ng-data ('' = auto-detect)")
+
     ENABLE_IMAGE_FACTORY: bool = Field(default=False, description="Enable image factory module")
     ENABLE_WEB_SCRAPER: bool = Field(default=False, description="Enable web scraper module")
+    ENABLE_WISKRO: bool = Field(default=False, description="Enable wiskro speech (STT/TTS) module")
 
     @property
     def api_base(self) -> str:

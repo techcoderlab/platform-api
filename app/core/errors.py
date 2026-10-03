@@ -36,6 +36,18 @@ class ExternalServiceError(AppError):
     def __init__(self, message: str):
         super().__init__(message, status_code=502)
 
+class PayloadTooLargeError(AppError):
+    def __init__(self, message: str):
+        super().__init__(message, status_code=413)
+
+class TooManyRequestsError(AppError):
+    def __init__(self, message: str):
+        super().__init__(message, status_code=429)
+
+class ServiceUnavailableError(AppError):
+    def __init__(self, message: str):
+        super().__init__(message, status_code=503)
+
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
     return error_response(
