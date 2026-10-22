@@ -16,6 +16,7 @@ Base path: `/api/v1/wiskro`. Every request needs the `X-API-Key` header (or `?ap
 | `lang` | string | from voice | `en-us`, `en-gb`, `es`, `fr-fr`, `hi`, `it`, `ja`, `pt-br`, `cmn`. Inferred from the voice prefix (`a`→en-us, `b`→en-gb, …). |
 | `format` | string | `mp3` | `mp3`, `wav`, `opus` (Ogg), `flac`. |
 | `prosody` | bool | `true` | Dynamic pacing per sentence (see below). |
+| `flow` | bool | `false` | Natural narration: the sentences of a paragraph are spoken in one model pass (up to 400 characters), so the intonation carries across them instead of restarting on every sentence. 0.25 s breaths between passes, and prosody never speeds a pass up. |
 
 **Response:** `200` with the audio file as the body.
 

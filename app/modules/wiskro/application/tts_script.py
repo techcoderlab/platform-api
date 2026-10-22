@@ -36,6 +36,9 @@ DEFAULT_SENTENCE_SPEED = 0.95
 FINAL_SENTENCE_SPEED = 0.92
 SHORT_SENTENCE_CHARS = 50
 LONG_SENTENCE_CHARS = 150
+# Flow mode: sentences of a paragraph are packed into one model pass (Kokoro then shapes the intonation across
+# them, instead of restarting flat on every sentence); speed boosts are dropped, they made punchy lines sound rushed.
+FLOW_CHUNK_CHARS = MAX_SENTENCE_CHARS
 
 _PAUSE = re.compile(r"\[\s*pause(?:\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(ms|s)?)?\s*\]", re.IGNORECASE)
 _PARAGRAPH_BREAK = re.compile(r"\n\s*\n")
@@ -151,26 +154,30 @@ def _append_pause(script: list[ScriptPart], seconds: float) -> None:
         script.append(PausePart(seconds))
 
 
-def _append_block(script: list[ScriptPart], block: str, prosody: bool) -> None:
+def _append_block(script: list[ScriptPart], block: str, prosody: bool, flow: bool) -> None:
     paragraphs = [p for p in _PARAGRAPH_BREAK.split(block) if p.strip()]
     for p_index, paragraph in enumerate(paragraphs):
         if p_index:
             _append_pause(script, PARAGRAPH_PAUSE_S)
         chunks = [c for s in _split_sentences(" ".join(paragraph.split())) for c in _split_long(s)]
+        if flow:
+            chunks = _pack(chunks, " ", FLOW_CHUNK_CHARS)
         for c_index, chunk in enumerate(chunks):
             is_final = c_index == len(chunks) - 1
             factor = _speed_factor(chunk, is_final) if prosody else 1.0
+            if flow:
+                factor = min(factor, 1.0)
             script.append(SpeechPart(text=chunk, speed_factor=factor))
 
 
-def build_script(text: str, *, prosody: bool = True) -> list[ScriptPart]:
+def build_script(text: str, *, prosody: bool = True, flow: bool = False) -> list[ScriptPart]:
     """Normalise `text` and split it into sentences and pauses, ready for synthesis."""
     normalized = normalize_text(text)
     script: list[ScriptPart] = []
     cursor = 0
     for match in _PAUSE.finditer(normalized):
-        _append_block(script, normalized[cursor:match.start()], prosody)
+        _append_block(script, normalized[cursor:match.start()], prosody, flow)
         _append_pause(script, _pause_seconds(match.group(1), match.group(2)))
         cursor = match.end()
-    _append_block(script, normalized[cursor:], prosody)
+    _append_block(script, normalized[cursor:], prosody, flow)
     return script

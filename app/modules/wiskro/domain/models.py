@@ -180,6 +180,7 @@ class SynthesisOptions:
     lang:         str | None  = None   # None = inferred from the voice
     audio_format: AudioFormat = AudioFormat.MP3
     prosody:      bool        = True   # sentence-aware dynamic pacing
+    flow:         bool        = False  # whole paragraphs per model pass (natural narration)
 
 
 @dataclass(frozen=True)

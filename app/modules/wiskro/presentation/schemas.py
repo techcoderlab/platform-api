@@ -57,6 +57,11 @@ class SynthesizeRequest(BaseModel):
     )
     format: AudioFormat = Field(default=AudioFormat.MP3, description="Output container.")
     prosody: bool = Field(default=True, description="Sentence-aware dynamic pacing (faster on '!', slower final sentence).")
+    flow: bool = Field(
+        default=False,
+        description="Speak each paragraph in as few model passes as possible (sentences keep one intonation arc) "
+                    "with longer breaths between passes and no speed boosts. More natural for narration.",
+    )
 
     @field_validator("text")
     @classmethod
@@ -90,6 +95,7 @@ class SynthesizeRequest(BaseModel):
             lang=self.lang,
             audio_format=self.format,
             prosody=self.prosody,
+            flow=self.flow,
         )
 
 

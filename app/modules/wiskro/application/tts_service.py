@@ -29,6 +29,7 @@ from app.modules.wiskro.domain.ports import AudioCodecPort, TextToSpeechEngine
 log = get_logger(__name__)
 
 SENTENCE_GAP_S = 0.1         # breath between sentences (model output is trimmed)
+FLOW_GAP_S = 0.25            # flow mode: a real breath between model passes
 MIN_SPEED, MAX_SPEED = 0.5, 2.0
 PROSODY_SPEED_CEILING = 1.2  # prosody boosts stop here; onsets get clipped beyond it
 
@@ -89,7 +90,8 @@ class TextToSpeechService:
         pieces: list[np.ndarray] = []
         spoken = 0
         previous_was_speech = False
-        for part in build_script(options.text, prosody=options.prosody):
+        gap = FLOW_GAP_S if options.flow else SENTENCE_GAP_S
+        for part in build_script(options.text, prosody=options.prosody, flow=options.flow):
             if isinstance(part, PausePart):
                 pieces.append(silence(part.seconds, sample_rate))
                 previous_was_speech = False
@@ -101,7 +103,7 @@ class TextToSpeechService:
                 log.warning("wiskro_tts_sentence_skipped", extra={"text": part.text[:80], "error": str(exc)})
                 continue
             if previous_was_speech:
-                pieces.append(silence(SENTENCE_GAP_S, sample_rate))
+                pieces.append(silence(gap, sample_rate))
             pieces.append(apply_fades(audio, sample_rate))
             previous_was_speech = True
             spoken += 1
@@ -136,6 +138,6 @@ class TextToSpeechService:
     def _cache_key(self, options: SynthesisOptions, voice: VoiceBlend) -> str:
         fingerprint = "\x1f".join((
             self._model_id, options.text, voice.canonical, f"{options.speed:.3f}",
-            options.lang or "", options.audio_format.value, str(options.prosody),
+            options.lang or "", options.audio_format.value, str(options.prosody), str(options.flow),
         ))
         return hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
